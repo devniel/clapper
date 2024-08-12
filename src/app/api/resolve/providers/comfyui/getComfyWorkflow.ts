@@ -8,9 +8,9 @@ export function getComfyWorkflow(request: ResolveRequest) {
   let comfyWorkflow = '{}'
 
   if (request.segment.category === ClapSegmentCategory.STORYBOARD) {
-    comfyWorkflow = request.settings.comfyWorkflowForImage
+    comfyWorkflow = request.settings.comfyWorkflowForImage.workflow
   } else if (request.segment.category === ClapSegmentCategory.VIDEO) {
-    comfyWorkflow = request.settings.comfyWorkflowForVideo
+    comfyWorkflow = request.settings.comfyWorkflowForVideo.workflow
   }
 
   // parse the node array from the ComfyUI workflow

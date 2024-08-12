@@ -29,6 +29,7 @@ const runwayml = '/images/providers/runwayml.png'
 const stabilityai = '/images/providers/stabilityai.png'
 const suno = '/images/providers/suno.png'
 const udio = '/images/providers/udio.png'
+const comfyui_server = '/images/providers/comfyui_server.png'
 
 export const ClapWorkflowProvidersLogos: Record<ClapWorkflowProvider, string> =
   {
@@ -62,4 +63,5 @@ export const ClapWorkflowProvidersLogos: Record<ClapWorkflowProvider, string> =
     [ClapWorkflowProvider.KUAISHOU]: kuaishou,
     [ClapWorkflowProvider.LEONARDOAI]: leonardoai,
     [ClapWorkflowProvider.EVERARTAI]: everartai,
+    ['COMFY_SERVER']: comfyui_server,
   }

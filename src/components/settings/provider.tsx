@@ -84,6 +84,11 @@ export function SettingsSectionProvider() {
   const kitsAiApiKey = useSettings((s) => s.kitsAiApiKey)
   const setKitsAiApiKey = useSettings((s) => s.setKitsAiApiKey)
 
+  const comfyWorkflowForImage = useSettings((s) => s.comfyWorkflowForImage)
+  const setComfyWorkflowForImage = useSettings(
+    (s) => s.setComfyWorkflowForImage
+  )
+
   const apiKeyType = showApiKeys ? 'text' : 'password'
 
   return (
@@ -272,6 +277,15 @@ export function SettingsSectionProvider() {
           onChange={setKitsAiApiKey}
           type={apiKeyType}
         />
+
+        <FormInput
+          label="ComfyUI Workflow for Image Generation"
+          value={comfyWorkflowForImage}
+          defaultValue={defaultSettings.comfyWorkflowForImage}
+          onChange={setComfyWorkflowForImage}
+          type="text"
+        />
+
       </FormSection>
     </div>
   )
