@@ -9,23 +9,19 @@ import { ComfyWorkflow } from '@aitube/clapper-services/dist/settings'
  */
 export function getValidComfyWorkflowTemplate(
   something: any,
-  defaultComfyWorkflowTemplate: ComfyWorkflow
-): ComfyWorkflow {
+  defaultComfyWorkflowTemplate: string
+): string {
   const strValue = `${something || defaultComfyWorkflowTemplate}`
   try {
     const workflow = JSON.parse(strValue)
     if (typeof workflow === 'object') {
-      return {
-        workflow: strValue,
-      }
+      return strValue
     } else {
       throw new Error(
         `this doesn't look like a ComfyUI workflow template string`
       )
     }
   } catch (err) {
-    return {
-      workflow: '{}',
-    }
+    return '{}'
   }
 }

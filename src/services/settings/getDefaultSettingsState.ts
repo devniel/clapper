@@ -1,14 +1,11 @@
 import { RenderingStrategy } from '@aitube/timeline'
 import { ComfyIcuAccelerator, SettingsState } from '@aitube/clapper-services'
 
-import {
-  defaultWorkflowForImages,
-  defaultWorkflowForImagesOutputNode,
-} from './workflows/image'
+import { defaultWorkflowForImages } from './workflows/image'
 
 export function getDefaultSettingsState(): SettingsState {
   const state: SettingsState = {
-    comfyUiClientId: '',
+    comfyUiClientId: 'clapper',
     replicateApiKey: '',
     comfyIcuApiKey: '',
     comfyIcuAccelerator: ComfyIcuAccelerator.L4,
@@ -74,18 +71,10 @@ export function getDefaultSettingsState(): SettingsState {
     maxVideosToGenerateInParallel: 1,
 
     comfyWorkflowForImage: defaultWorkflowForImages,
-    comfyWorkflowForVideo: {
-      workflow: '{}'
-    },
-    comfyWorkflowForVoice: {
-      workflow: '{}'
-    },
-    comfyWorkflowForSound: {
-      workflow: '{}'
-    },
-    comfyWorkflowForMusic: {
-      workflow: '{}'
-    },
+    comfyWorkflowForVideo: '{}',
+    comfyWorkflowForVoice: '{}',
+    comfyWorkflowForSound: '{}',
+    comfyWorkflowForMusic: '{}',
 
     comfyUiApiUrl: 'http://localhost:8189',
 

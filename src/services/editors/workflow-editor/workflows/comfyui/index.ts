@@ -12,7 +12,7 @@ import { text_to_image_demo_workflow } from '../common/comfyui/text_to_image_dem
 export const comfyuiWorkflows: ClapWorkflow[] = [
   {
     id: 'comfyui://text_to_image_demo_workflow',
-    label: "WIP DEMO (DOESN'T WORK)",
+    label: 'Default Text To Image Workflow',
     description: '',
     tags: [],
     author: '',

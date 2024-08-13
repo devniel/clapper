@@ -19,7 +19,6 @@ import { getValidComfyWorkflowTemplate } from '@/lib/utils/getValidComfyWorkflow
 import { parseComfyIcuAccelerator } from '@/lib/utils/parseComfyIcuAccelerator'
 import { findWorkflows } from '@/components/toolbars/top-menu/lists/getWorkflowProviders'
 import { useWorkflowEditor } from '../editors'
-import { ComfyWorkflow } from '@aitube/clapper-services/dist/settings'
 
 export const useSettings = create<SettingsStore>()(
   persist(
@@ -571,7 +570,7 @@ export const useSettings = create<SettingsStore>()(
           ),
         })
       },
-      setComfyWorkflowForImage: (comfyWorkflowForImage?: ComfyWorkflow) => {
+      setComfyWorkflowForImage: (comfyWorkflowForImage?: string) => {
         set({
           comfyWorkflowForImage: getValidComfyWorkflowTemplate(
             comfyWorkflowForImage,
@@ -579,7 +578,7 @@ export const useSettings = create<SettingsStore>()(
           ),
         })
       },
-      setComfyWorkflowForVideo: (comfyWorkflowForVideo?: ComfyWorkflow) => {
+      setComfyWorkflowForVideo: (comfyWorkflowForVideo?: string) => {
         set({
           comfyWorkflowForVideo: getValidComfyWorkflowTemplate(
             comfyWorkflowForVideo,
@@ -587,7 +586,7 @@ export const useSettings = create<SettingsStore>()(
           ),
         })
       },
-      setComfyWorkflowForVoice: (comfyWorkflowForVoice?: ComfyWorkflow) => {
+      setComfyWorkflowForVoice: (comfyWorkflowForVoice?: string) => {
         set({
           comfyWorkflowForVoice: getValidComfyWorkflowTemplate(
             comfyWorkflowForVoice,
@@ -595,7 +594,7 @@ export const useSettings = create<SettingsStore>()(
           ),
         })
       },
-      setComfyWorkflowForSound: (comfyWorkflowForSound?: ComfyWorkflow) => {
+      setComfyWorkflowForSound: (comfyWorkflowForSound?: string) => {
         set({
           comfyWorkflowForSound: getValidComfyWorkflowTemplate(
             comfyWorkflowForSound,
@@ -603,7 +602,7 @@ export const useSettings = create<SettingsStore>()(
           ),
         })
       },
-      setComfyWorkflowForMusic: (comfyWorkflowForMusic?: ComfyWorkflow) => {
+      setComfyWorkflowForMusic: (comfyWorkflowForMusic?: string) => {
         set({
           comfyWorkflowForMusic: getValidComfyWorkflowTemplate(
             comfyWorkflowForMusic,
