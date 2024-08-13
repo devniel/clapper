@@ -128,7 +128,7 @@ export function SettingsSectionProvider() {
           label="ComfyUI API URL"
           value={comfyUiApiUrl}
           defaultValue={defaultSettings.comfyUiApiUrl}
-          onChange={setComfyIcuApiKey}
+          onChange={setComfyUiApiUrl}
           type="text"
         />
 
@@ -137,7 +137,7 @@ export function SettingsSectionProvider() {
           value={comfyUiClientId}
           defaultValue={defaultSettings.comfyUiClientId}
           onChange={setComfyUiClientId}
-          type={apiKeyType}
+          type="text"
         />
 
         <FormInput
