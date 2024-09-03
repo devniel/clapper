@@ -1,19 +1,38 @@
-// @ts-nocheck
 import { UUID } from '@aitube/clap'
 import { FFmpeg } from '@ffmpeg/ffmpeg'
+import { FileData } from '@ffmpeg/ffmpeg/dist/esm/types'
 import { toBlobURL } from '@ffmpeg/util'
 
 export const TAG = 'io/createFullVideo'
 
-export type FFMPegVideoInput = {
+export type FFMPegAssetInput = {
   data: Uint8Array | null
   startTimeInMs: number
   endTimeInMs: number
   durationInSecs: number
+  type: 'video' | 'image' | 'audio' | 'empty'
 }
 
-export type FFMPegAudioInput = FFMPegVideoInput
+export type FFMPegAudioInput = FFMPegAssetInput & {
+  type: 'audio'
+}
 
+export type FFMPegImageInput = FFMPegAssetInput & {
+  type: 'image'
+  width: number
+  height: number
+}
+
+export type FFMPegVideoInput = FFMPegAssetInput & {
+  type: 'video'
+  width: number
+  height: number
+  framerate: number
+}
+
+export type FFMPegEmptyInput = FFMPegAssetInput & {
+  type: 'empty'
+}
 /**
  * Download and load single and multi-threading FFMPeg.
  * MT for video
@@ -225,6 +244,88 @@ export async function addEmptyVideo(
   fileListContentArray.push(`file ${filename}`)
 }
 
+export async function addImageSlideshowVideo(
+  image: FFMPegImageInput,
+  durationInSecs: number,
+  width: number,
+  height: number,
+  framerate: number,
+  filename: string,
+  fileListContentArray: string[],
+  onProgress?: (progress: number, message?: string) => void
+) {
+  const ffmpeg = await loadFFmpegMt()
+
+  console.log(TAG, 'Creating image slideshow video', {
+    image,
+    durationInSecs,
+    width,
+    height,
+    framerate,
+    filename,
+    fileListContentArray,
+  })
+
+  const baseImageFilename = `base_image_${UUID()}.jpg`
+  let scaledBaseImageFilename = `scaled_base_image_${UUID()}.jpg`
+  await ffmpeg.writeFile(baseImageFilename, image.data as FileData)
+
+  // If image dimensions are different than the target video, scale it
+  if (image.width !== width || image.height !== height) {
+    await ffmpeg.exec([
+      '-i',
+      baseImageFilename,
+      '-vf',
+      `scale=${width}:${height}`,
+      '-c:v',
+      'mjpeg',
+      '-pix_fmt',
+      'yuvj420p',
+      '-frames:v',
+      '1',
+      scaledBaseImageFilename,
+    ])
+  } else {
+    scaledBaseImageFilename = baseImageFilename
+  }
+
+  await captureFFmpegProgress(
+    ffmpeg,
+    durationInSecs * 1000,
+    async () => {
+      await ffmpeg.exec([
+        '-loop',
+        '1',
+        '-framerate',
+        `1/${durationInSecs}`,
+        '-i',
+        scaledBaseImageFilename,
+        '-c:v',
+        'libx264',
+        '-pix_fmt',
+        'yuv420p',
+        '-r',
+        `${framerate}`,
+        '-t',
+        `${durationInSecs}`,
+        '-loglevel',
+        'verbose',
+        filename,
+      ])
+    },
+    (progress) => {
+      onProgress?.(progress)
+    }
+  )
+
+  console.log(TAG, 'Image slideshow video created', filename)
+  fileListContentArray.push(`file ${filename}`)
+  await ffmpeg.deleteFile(baseImageFilename)
+  if (baseImageFilename !== scaledBaseImageFilename) {
+    await ffmpeg.deleteFile(scaledBaseImageFilename)
+  }
+}
+
 /**
  * Creates the full mixed audio including silence
  * segments and loads it into ffmpeg with the given `filename`.
@@ -240,7 +341,7 @@ export async function createFullAudio(
   console.log(TAG, 'Creating full audio', filename)
 
   const ffmpeg = await loadFFmpegSt()
-  const filterComplexParts = []
+  const filterComplexParts: string[] = []
   const baseFilename = `base_${filename}`
   let currentProgress = 0
   let targetProgress = 25
@@ -291,9 +392,8 @@ export async function createFullAudio(
     audioInputFiles.push('-i', audioFilename)
     const delay = audio.startTimeInMs
     const durationInSecs = audio.endTimeInMs - audio.startTimeInMs / 1000
-    filterComplexParts.push(
-      `[${index + 1}:a]atrim=0:${durationInSecs},adelay=${delay}|${delay}[delayed${index}]`
-    )
+    const filterComplexString = `[${index + 1}:a]atrim=0:${durationInSecs},adelay=${delay}|${delay}[delayed${index}]`
+    filterComplexParts.push(filterComplexString)
     currentProgress += expectedProgressForItem * 100
   }
 
@@ -342,80 +442,112 @@ export async function createFullAudio(
  * @throws Error if ffmpeg returns exit code 1
  */
 export async function createFullSilentVideo(
+  images: FFMPegImageInput[],
   videos: FFMPegVideoInput[],
   filename: string,
   totalVideoDurationInMs: number,
   width: number,
   height: number,
+  framerate = 25,
   excludeEmptyContent = false,
   onProgress?: (progress: number, message: string) => void
 ) {
   const ffmpeg = await loadFFmpegMt()
   const fileList = 'fileList.txt'
-  const fileListContentArray = []
+  const fileListContentArray: string[] = []
 
-  // Complete array of videos including concatenated empty segments
+  const content = [...images, ...videos].sort(
+    (a, b) => a.startTimeInMs - b.startTimeInMs
+  )
+  const sortedContent: FFMPegAssetInput[] = []
+
+  for (let i = 0; i < content.length; i++) {
+    const currentItem = content[i]
+    if (currentItem.type === 'video') {
+      sortedContent.push(currentItem)
+    } else if (currentItem.type === 'image') {
+      if (i < content.length - 1 && content[i + 1].type === 'video') {
+        const nextVideo = content[i + 1]
+        // Support of overlapping videos over images
+        if (currentItem.endTimeInMs > nextVideo.startTimeInMs) {
+          currentItem.endTimeInMs = nextVideo.startTimeInMs
+          currentItem.durationInSecs =
+            (currentItem.endTimeInMs - currentItem.startTimeInMs) / 1000
+        }
+      }
+      sortedContent.push(currentItem)
+    }
+  }
+
+  // Complete array of sorted content including concatenated empty segments
   // This is helpful for cleaner progress log
-  let lastStartTimeVideoInMs = 0
-  let videosWithGaps: FFMPegVideoInput[]
+  let sortedContentWithGaps: FFMPegAssetInput[]
 
-  if (!videos.length) {
-    videosWithGaps = [
+  if (!sortedContent.length) {
+    sortedContentWithGaps = [
       {
         startTimeInMs: 0,
         endTimeInMs: totalVideoDurationInMs,
         data: null,
         durationInSecs: totalVideoDurationInMs / 1000,
+        type: 'empty',
       },
     ]
   } else {
-    videosWithGaps = videos.reduce((arr: FFMPegVideoInput[], video, index) => {
-      const emptyVideoDurationInMs =
-        video.startTimeInMs - lastStartTimeVideoInMs
-      if (emptyVideoDurationInMs) {
-        arr.push({
-          startTimeInMs: lastStartTimeVideoInMs,
-          endTimeInMs: lastStartTimeVideoInMs + emptyVideoDurationInMs,
-          data: null,
-          durationInSecs: emptyVideoDurationInMs / 1000,
-        })
-      }
-      arr.push(video)
-      lastStartTimeVideoInMs = video.endTimeInMs
-      if (
-        index == videos.length - 1 &&
-        lastStartTimeVideoInMs < totalVideoDurationInMs
-      ) {
-        arr.push({
-          startTimeInMs: lastStartTimeVideoInMs,
-          endTimeInMs: totalVideoDurationInMs,
-          data: null,
-          durationInSecs:
-            (totalVideoDurationInMs - lastStartTimeVideoInMs) / 1000,
-        })
-      }
-      return arr
-    }, [])
+    let lastStartTimeContentInMs = 0
+    sortedContentWithGaps = sortedContent.reduce(
+      (arr: FFMPegAssetInput[], content, index) => {
+        const emptyContentDurationInMs =
+          content.startTimeInMs - lastStartTimeContentInMs
+        if (emptyContentDurationInMs) {
+          arr.push({
+            startTimeInMs: lastStartTimeContentInMs,
+            endTimeInMs: lastStartTimeContentInMs + emptyContentDurationInMs,
+            data: null,
+            durationInSecs: emptyContentDurationInMs / 1000,
+            type: 'empty',
+          })
+        }
+        arr.push(content)
+        lastStartTimeContentInMs = content.endTimeInMs
+        return arr
+      },
+      []
+    )
+    if (lastStartTimeContentInMs < totalVideoDurationInMs) {
+      sortedContentWithGaps.push({
+        startTimeInMs: lastStartTimeContentInMs,
+        endTimeInMs: totalVideoDurationInMs,
+        data: null,
+        durationInSecs:
+          (totalVideoDurationInMs - lastStartTimeContentInMs) / 1000,
+        type: 'empty',
+      })
+    }
   }
 
   onProgress?.(0, 'Preparing videos...')
 
   // Arbitrary percentage, as `concat` is fast,
   // then estimate the generation of gap videos
-  // as the 70% of the work
+  // or image slideshow videos as the 70% of the work
   let currentProgress = 0
   let targetProgress = 70
 
-  for (const video of videosWithGaps) {
+  for (const content of sortedContentWithGaps) {
+    if (content.durationInSecs === 0) {
+      continue
+    }
     const expectedProgressForItem =
-      (((video.durationInSecs * 1000) / totalVideoDurationInMs) *
+      (((content.durationInSecs * 1000) / totalVideoDurationInMs) *
         targetProgress) /
       100
-    if (!video.data) {
+
+    let collectedProgress = 0
+    if (content.type === 'empty') {
       if (excludeEmptyContent) continue
-      let collectedProgress = 0
       await addEmptyVideo(
-        video.durationInSecs,
+        (content.endTimeInMs - content.startTimeInMs) / 1000,
         width,
         height,
         `empty_video_${UUID()}.mp4`,
@@ -429,9 +561,27 @@ export async function createFullSilentVideo(
           collectedProgress = expectedProgressForItem * subProgress
         }
       )
-    } else {
+    } else if (content.type === 'image') {
+      await addImageSlideshowVideo(
+        content as FFMPegImageInput,
+        (content.endTimeInMs - content.startTimeInMs) / 1000,
+        width,
+        height,
+        framerate,
+        `slideshow_${UUID()}.mp4`,
+        fileListContentArray,
+        (progress) => {
+          const subProgress = progress / 100
+          currentProgress +=
+            (expectedProgressForItem * subProgress - collectedProgress) * 100
+          console.log(TAG, 'Current progress', currentProgress)
+          onProgress?.(currentProgress, 'Preparing videos...')
+          collectedProgress = expectedProgressForItem * subProgress
+        }
+      )
+    } else if (content.type === 'video') {
       const videoFilename = `video_${UUID()}.mp4`
-      await ffmpeg.writeFile(videoFilename, video.data)
+      await ffmpeg.writeFile(videoFilename, content.data as FileData)
       fileListContentArray.push(`file ${videoFilename}`)
       currentProgress += expectedProgressForItem * 100
       console.log(TAG, 'Current progress', currentProgress)
@@ -461,6 +611,8 @@ export async function createFullSilentVideo(
         'verbose',
         '-c',
         'copy',
+        '-r',
+        `${framerate}`,
         filename,
       ])
     },

@@ -5,10 +5,11 @@ import {
   createFullAudio,
   createFullSilentVideo,
   FFMPegAudioInput,
-  FFMPegVideoInput,
+  FFMPegImageInput,
   loadFFmpegMt,
   loadFFmpegSt,
   TAG,
+  FFMPegVideoInput,
 } from './ffmpegUtils'
 
 /**
@@ -17,11 +18,13 @@ import {
  *
  */
 export async function createFullVideo(
+  images: FFMPegImageInput[],
   videos: FFMPegVideoInput[],
   audios: FFMPegAudioInput[],
   width: number,
   height: number,
   totalVideoDurationInMs: number,
+  framerate: number,
   onProgress: (progress: number, message: string) => void
 ): Promise<Uint8Array> {
   const ffmpeg = await loadFFmpegMt()
@@ -38,11 +41,13 @@ export async function createFullVideo(
   let targetProgress = 33.3
 
   await createFullSilentVideo(
+    images,
     videos,
     fullSilentVideoFilename,
     totalVideoDurationInMs,
     width,
     height,
+    framerate,
     false,
     (progress, message) => {
       onProgress?.(

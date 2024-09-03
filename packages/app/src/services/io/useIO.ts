@@ -51,7 +51,11 @@ import {
   formatSegmentForExport,
 } from '@/lib/utils/formatSegmentForExport'
 import { sleep } from '@/lib/utils/sleep'
-import { FFMPegAudioInput, FFMPegVideoInput } from './ffmpegUtils'
+import {
+  FFMPegAudioInput,
+  FFMPegImageInput,
+  FFMPegVideoInput,
+} from './ffmpegUtils'
 import { createFullVideo } from './createFullVideo'
 import { extractScenesFromVideo } from './extractScenesFromVideo'
 import { base64DataUriToFile } from '@/lib/utils/base64DataUriToFile'
@@ -526,90 +530,111 @@ export const useIO = create<IOStore>((set, get) => ({
     })
 
     try {
-    const timeline: TimelineStore = useTimeline.getState()
+      const timeline: TimelineStore = useTimeline.getState()
 
-    const {
-      meta,
-      getClap,
-      totalDurationInMs,
-      segments: timelineSegments,
-    } = timeline
+      const {
+        meta,
+        getClap,
+        totalDurationInMs,
+        segments: timelineSegments,
+      } = timeline
 
-    const clap = await getClap()
+      const clap = await getClap()
 
-    if (!clap) {
-      throw new Error(`cannot save a clap.. if there is no clap`)
-    }
+      if (!clap) {
+        throw new Error(`cannot save a clap.. if there is no clap`)
+      }
 
-    const ignoreThisVideoSegmentId = (await getFinalVideo(clap))?.id || ''
+      const ignoreThisVideoSegmentId = (await getFinalVideo(clap))?.id || ''
 
-    const segments: ExportableSegment[] = timelineSegments
-      .map((segment, i) => formatSegmentForExport(segment, i))
-      .filter(
-        ({ id, isExportableToFile }) =>
-          isExportableToFile && id !== ignoreThisVideoSegmentId
-      )
+      const segments: ExportableSegment[] = timelineSegments
+        .map((segment, i) => formatSegmentForExport(segment, i))
+        .filter(
+          ({ id, isExportableToFile }) =>
+            isExportableToFile && id !== ignoreThisVideoSegmentId
+        )
 
-    const videos: FFMPegVideoInput[] = []
-    const audios: FFMPegAudioInput[] = []
+      const videos: FFMPegVideoInput[] = []
+      const audios: FFMPegAudioInput[] = []
+      const images: FFMPegImageInput[] = []
 
-    segments.forEach(
-      ({
-        segment,
-        prefix,
-        filePath,
-        assetUrl,
-        assetSourceType,
-        isExportableToFile,
-      }) => {
-        // we extract the base64 files
-        if (isExportableToFile) {
-          assetUrl = filePath
-          assetSourceType = ClapAssetSource.PATH
+      segments.forEach(
+        ({
+          segment,
+          prefix,
+          filePath,
+          assetUrl,
+          assetSourceType,
+          isExportableToFile,
+        }) => {
+          // we extract the base64 files
+          if (isExportableToFile) {
+            assetUrl = filePath
+            assetSourceType = ClapAssetSource.PATH
+            
+            if (filePath.startsWith('video/')) {
+              videos.push({
+                data: base64DataUriToUint8Array(segment.assetUrl),
+                startTimeInMs: segment.startTimeInMs,
+                endTimeInMs: segment.endTimeInMs,
+                durationInSecs: segment.assetDurationInMs / 1000,
+                type: 'video',
+                width: 1024,
+                height: 576,
+                framerate: 25
+              })
+            }
 
-          if (filePath.startsWith('video/')) {
-            videos.push({
-              data: base64DataUriToUint8Array(segment.assetUrl),
-              startTimeInMs: segment.startTimeInMs,
-              endTimeInMs: segment.endTimeInMs,
-              durationInSecs: segment.assetDurationInMs / 1000,
-            })
-          }
+            if (segment.assetFileFormat === 'image/jpeg') {
+              images.push({
+                data: base64DataUriToUint8Array(segment.assetUrl),
+                startTimeInMs: segment.startTimeInMs,
+                endTimeInMs: segment.endTimeInMs,
+                // FIXME: durationInSecs is different than segment.endTimeInMs - segment.startTimeInMs
+                durationInSecs:
+                  (segment.endTimeInMs - segment.startTimeInMs) / 1000,
+                type: 'image',
+                width: 1024,
+                height: 576,
+              })
+            }
 
-          if (
-            filePath.startsWith('music/') ||
-            filePath.startsWith('sound/') ||
-            filePath.startsWith('dialogue/')
-          ) {
-            console.log('adding audio')
-            audios.push({
-              data: base64DataUriToUint8Array(segment.assetUrl),
-              startTimeInMs: segment.startTimeInMs,
-              endTimeInMs: segment.endTimeInMs,
-              durationInSecs: segment.assetDurationInMs / 1000,
-            })
+            if (
+              filePath.startsWith('music/') ||
+              filePath.startsWith('sound/') ||
+              filePath.startsWith('dialogue/')
+            ) {
+              audios.push({
+                data: base64DataUriToUint8Array(segment.assetUrl),
+                startTimeInMs: segment.startTimeInMs,
+                endTimeInMs: segment.endTimeInMs,
+                durationInSecs: segment.assetDurationInMs / 1000,
+                type: 'audio',
+              })
+            }
           }
         }
-      }
-    )
+      )
 
-    const fullVideo = await createFullVideo(
-      videos,
-      audios,
-      1024,
-      576,
-      totalDurationInMs,
-      (progress, message) => {
-        task.setProgress({
-          message: `Rendering video (${Math.round(progress)}%)`,
-          value: progress * 0.9,
-        })
-      }
-    )
+      const fullVideo = await createFullVideo(
+        images,
+        videos,
+        audios,
+        1024,
+        576,
+        totalDurationInMs,
+        25,
+        (progress, message) => {
+          task.setProgress({
+            message: `Rendering video (${Math.round(progress)}%)`,
+            value: progress * 0.9,
+          })
+        }
+      )
 
-    const videoBlob = new Blob([fullVideo], { type: 'video/mp4' })
-    saveAnyFile(videoBlob, 'my_project.mp4')
-    task.success()
+      const videoBlob = new Blob([fullVideo], { type: 'video/mp4' })
+      saveAnyFile(videoBlob, 'my_project.mp4')
+      task.success()
     } catch (err) {
       console.error(err)
       task.fail(`${err || 'unknown error'}`)
@@ -648,6 +673,7 @@ export const useIO = create<IOStore>((set, get) => ({
 
       const videos: FFMPegVideoInput[] = []
       const audios: FFMPegAudioInput[] = []
+      const images: FFMPegImageInput[] = []
 
       const includeFullVideo = false
 
@@ -678,6 +704,22 @@ export const useIO = create<IOStore>((set, get) => ({
                   startTimeInMs: segment.startTimeInMs,
                   endTimeInMs: segment.endTimeInMs,
                   durationInSecs: segment.assetDurationInMs / 1000,
+                  type: 'video',
+                  width: 1024,
+                  height: 576,
+                  framerate: 25,
+                })
+              }
+
+              if (filePath.startsWith('image/')) {
+                images.push({
+                  data: base64DataUriToUint8Array(segment.assetUrl),
+                  startTimeInMs: segment.startTimeInMs,
+                  endTimeInMs: segment.endTimeInMs,
+                  durationInSecs: segment.assetDurationInMs / 1000,
+                  type: 'image',
+                  width: 1024,
+                  height: 576 
                 })
               }
 
@@ -690,6 +732,7 @@ export const useIO = create<IOStore>((set, get) => ({
                   startTimeInMs: segment.startTimeInMs,
                   endTimeInMs: segment.endTimeInMs,
                   durationInSecs: segment.assetDurationInMs / 1000,
+                  type: 'audio',
                 })
               }
             }
@@ -712,11 +755,13 @@ export const useIO = create<IOStore>((set, get) => ({
 
       if (includeFullVideo) {
         const fullVideo = await createFullVideo(
+          images,
           videos,
           audios,
           meta.width,
           meta.height,
           timeline.totalDurationInMs,
+          25,
           (progress, message) => {
             task.setProgress({
               message,
